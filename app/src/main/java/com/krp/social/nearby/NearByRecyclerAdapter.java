@@ -13,17 +13,22 @@ import java.util.List;
 public class NearByRecyclerAdapter extends RecyclerView.Adapter<NearByRecyclerViewHolder> {
 
     private List<User> mListUsers;
+    private OnNearByUserSelectListener userSelectListener;
+
+    public NearByRecyclerAdapter(OnNearByUserSelectListener listener) {
+        userSelectListener = listener;
+    }
 
     @Override
     public NearByRecyclerViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         return NearByRecyclerViewHolder.getInstance(LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_recycler_nearby, parent, false));
+                .inflate(R.layout.item_recycler_nearby, parent, false), userSelectListener);
     }
 
     @Override
     public void onBindViewHolder(NearByRecyclerViewHolder holder, int position) {
         User user = mListUsers.get(position);
-        holder.setValues(user.profileImageUrl, user.username, user.age);
+        holder.setUser(user);
     }
 
     @Override
@@ -63,5 +68,13 @@ public class NearByRecyclerAdapter extends RecyclerView.Adapter<NearByRecyclerVi
             mListUsers.remove(mListUsers);
         }
         notifyDataSetChanged();
+    }
+
+    public interface OnNearByUserSelectListener {
+        void onUserSelected(User user);
+    }
+
+    public List<User> getNearByUsers() {
+        return mListUsers;
     }
 }
