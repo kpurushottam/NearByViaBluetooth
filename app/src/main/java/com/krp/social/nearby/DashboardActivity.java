@@ -1,8 +1,8 @@
 package com.krp.social.nearby;
 
 import android.app.ActionBar;
-import android.app.Activity;
 import android.app.Dialog;
+import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -14,7 +14,6 @@ import android.os.Handler;
 import android.os.Message;
 import android.support.design.widget.NavigationView;
 import android.support.v4.app.DialogFragment;
-import android.support.v4.app.FragmentActivity;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
@@ -26,15 +25,15 @@ import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 public class DashboardActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener, View.OnClickListener, NearByRecyclerAdapter.OnNearByUserSelectListener {
@@ -59,11 +58,12 @@ public class DashboardActivity extends AppCompatActivity
     // Intent request codes
     private static final int REQUEST_CONNECT_DEVICE_SECURE = 1;
     private static final int REQUEST_CONNECT_DEVICE_INSECURE = 2;
+    private static final int REQUEST_SHOW_USER_PROFILE = 1003;
 
     private List<User> connectedUsers = new ArrayList<>();
 
     /**
-     * Name of the connected device
+     * Name of the connectedReceiver device
      */
     private String mConnectedDeviceName = null;
 
@@ -75,6 +75,8 @@ public class DashboardActivity extends AppCompatActivity
      * Member object for the chat services
      */
     private BluetoothChatService mChatService = null;
+
+    private ProgressDialog mWaitingDialog;
 
 
     private final DialogFragment mBluetoothWarningDialog = new DialogFragment() {
@@ -124,14 +126,12 @@ public class DashboardActivity extends AppCompatActivity
                         mBtnRefreshSearch.setVisibility(View.GONE);
                         mProgressSearching.setVisibility(View.VISIBLE);
                         setupChat();
-                        searchBluetoothDevices();
                         break;
                 }
 
             } else if(action.equals(BluetoothDevice.ACTION_FOUND)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                mRecyclerAdapter.addData(new User(device.getName(), device.getAddress()));
-                connectDevice(device.getAddress(), true);
+                connectDevice(device.getAddress(), false);
 
             } else if(action.equals(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)) {
                 mBtnRefreshSearch.setVisibility(View.VISIBLE);
@@ -181,12 +181,16 @@ public class DashboardActivity extends AppCompatActivity
                     break;
 
                 case Constants.MESSAGE_READ_OBJ:
+                    dismissWaitingDialog();
                     User user1 = (User) msg.obj;
                     connectedUsers.add(user1);
+                    startActivityForResult(new Intent(DashboardActivity.this, LoginActivity.class)
+                                    .putExtra(LoginActivity.KEY_INTENT_ACTIVITY_PROFILE, user1),
+                            REQUEST_SHOW_USER_PROFILE);
                     break;
 
                 case Constants.MESSAGE_DEVICE_NAME:
-                    // save the connected device's name
+                    // save the connectedReceiver device's name
                     mConnectedDeviceName = msg.getData().getString(Constants.DEVICE_NAME);
                     if (null != activity) {
                         Toast.makeText(activity, "Connected to "
@@ -199,9 +203,20 @@ public class DashboardActivity extends AppCompatActivity
                                 Toast.LENGTH_SHORT).show();
                     }
                     break;
+                case Constants.NEAR_BY_USER_FOUND:
+                    if (null != activity) {
+                        Device device = (Device) msg.obj;
+                        nearBy.put(device.bluetoothDevice.getAddress(), device);
+                        mRecyclerAdapter.addData(new User(
+                                device.bluetoothDevice.getName(), device.bluetoothDevice.getAddress()));
+                        mRecyclerAdapter.notifyDataSetChanged();
+                    }
+                    break;
             }
         }
     };
+
+    private Map<String, Device> nearBy = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -215,6 +230,7 @@ public class DashboardActivity extends AppCompatActivity
         setupDrawerLayout();
         setupHomeNavigationView();
         setupNearByNavigationView();
+        setupWaitingDialog();
 
         // Register for broadcast listeners
         registerReceiver(mBluetoothReceiver,
@@ -228,8 +244,10 @@ public class DashboardActivity extends AppCompatActivity
     @Override
     protected void onStart() {
         super.onStart();
-        if (mBluetoothAdapter.isEnabled() && mChatService == null) {
-            setupChat();
+        if (mBluetoothAdapter.isEnabled()) {
+            if(mChatService == null) {
+                setupChat();
+            }
         }
     }
 
@@ -241,7 +259,7 @@ public class DashboardActivity extends AppCompatActivity
                     alert("Turn on Bluetooth! Then try again.");
                     finish();
 
-                } else {
+                } else if(resultCode == RESULT_OK) {
                     mDrawerLayout.openDrawer(GravityCompat.END);
                 }
                 break;
@@ -250,6 +268,9 @@ public class DashboardActivity extends AppCompatActivity
                 if(resultCode == RESULT_CANCELED) {
                     alert("Turnning off \"Discovery\" other users will not be able to find you!");
                 }
+                if(!mBluetoothAdapter.isDiscovering()) {
+                    mBluetoothAdapter.startDiscovery();
+                }
         }
     }
 
@@ -257,19 +278,20 @@ public class DashboardActivity extends AppCompatActivity
     protected void onResume() {
         super.onResume();
         if(mBluetoothAdapter.isEnabled()) {
-            if(!mBluetoothAdapter.isDiscovering()) {
+            if(mBluetoothAdapter.getScanMode() !=
+                    BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE) {
+                Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+                discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 0);
+                startActivityForResult(discoverableIntent, REQUEST_BT_DEVICE_DISCOVERY);
+
+            } else if(!mBluetoothAdapter.isDiscovering()) {
                 mBluetoothAdapter.startDiscovery();
             }
-        }
 
-        // Performing this check in onResume() covers the case in which BT was
-        // not enabled during onStart(), so we were paused to enable it...
-        // onResume() will be called when ACTION_REQUEST_ENABLE activity returns.
-        if (mChatService != null) {
-            // Only if the state is STATE_NONE, do we know that we haven't started already
-            if (mChatService.getState() == BluetoothChatService.STATE_NONE) {
-                // Start the Bluetooth chat services
-                mChatService.start();
+            if (mChatService != null) {
+                if (mChatService.getState() == BluetoothChatService.STATE_NONE) {
+                    mChatService.start();
+                }
             }
         }
     }
@@ -277,6 +299,7 @@ public class DashboardActivity extends AppCompatActivity
     @Override
     protected void onDestroy() {
         super.onDestroy();
+
         if (mChatService != null) {
             mChatService.stop();
         }
@@ -335,6 +358,14 @@ public class DashboardActivity extends AppCompatActivity
         mProgressSearching = (ProgressBar) findViewById(R.id.progress_searching);
     }
 
+    private void setupWaitingDialog() {
+        mWaitingDialog = new ProgressDialog(this);
+        mWaitingDialog.setTitle("");
+        mWaitingDialog.setMessage("Connecting...");
+        mWaitingDialog.setIndeterminate(true);
+        mWaitingDialog.setCancelable(false);
+    }
+
     @Override
     public void onBackPressed() {
         if (mDrawerLayout.isDrawerOpen(GravityCompat.START)) {
@@ -372,26 +403,20 @@ public class DashboardActivity extends AppCompatActivity
         mToast.show();
     }
 
-    public void searchBluetoothDevices() {
-        alert("Searching...");
-
-        // search paired devices
-        Set<BluetoothDevice> pairedDevices = mBluetoothAdapter.getBondedDevices();
-        // If there are paired devices
-        int size = pairedDevices.size();
-        if(size == 0) {
-            return;
+    public void showWaitingDialog() {
+        if(mWaitingDialog == null) {
+            setupWaitingDialog();
         }
 
-        List<User> users = new ArrayList<>(size);
-        for (BluetoothDevice device : pairedDevices) {
-            users.add(new User(device.getName(), device.getAddress()));
-            connectDevice(device.getAddress(), true);
+        if(!mWaitingDialog.isShowing()) {
+            mWaitingDialog.show();
         }
-        mRecyclerAdapter.refreshDataSet(users);
+    }
 
-        // via discovery
-        mBluetoothAdapter.startDiscovery();
+    public void dismissWaitingDialog() {
+        if(mWaitingDialog.isShowing()) {
+            mWaitingDialog.dismiss();
+        }
     }
 
     /**
@@ -474,7 +499,6 @@ public class DashboardActivity extends AppCompatActivity
                 if(mBluetoothAdapter.isEnabled()) {
                     mBtnRefreshSearch.setVisibility(View.GONE);
                     mProgressSearching.setVisibility(View.VISIBLE);
-                    searchBluetoothDevices();
                 }
                 break;
         }
@@ -482,24 +506,19 @@ public class DashboardActivity extends AppCompatActivity
 
     @Override
     public void onUserSelected(User user) {
-        //mBluetoothAdapter.cancelDiscovery();
-        //connectDevice(user.deviceAddress, true);
-
-        if(connectedUsers.contains(user)) {
-            alert(user.toString());
-        }
+        //if(connectedUsers.contains(user)) {
+            showWaitingDialog();
+            Device device = nearBy.get(user.deviceAddress);
+            mChatService.connect(device.bluetoothDevice, Boolean.valueOf(device.connectionType),
+                    BluetoothChatService.STATE_FETCHING_DATA);
+        //}
     }
 
     /**
      * Establish connection with other divice
-     *
-     * @param secure Socket Security type - Secure (true) , Insecure (false)
      */
     private void connectDevice(String address, boolean secure) {
-        // Get the device MAC address
-        // Get the BluetoothDevice object
         BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
-        // Attempt to connect to the device
         mChatService.connect(device, secure);
     }
 
@@ -535,50 +554,5 @@ public class DashboardActivity extends AppCompatActivity
             return;
         }
         actionBar.setSubtitle(subTitle);
-    }
-
-    /**
-     * Sends a message.
-     *
-     * @param message A string of text to send.
-     */
-    private void sendMessage(String message) {
-        // Check that we're actually connected before trying anything
-        if (mChatService.getState() != BluetoothChatService.STATE_CONNECTED) {
-            Toast.makeText(this, "Not connected", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Check that there's actually something to send
-        if (message.length() > 0) {
-            // Get the message bytes and tell the BluetoothChatService to write
-            byte[] send = message.getBytes();
-            mChatService.write(send);
-
-            // Reset out string buffer to zero and clear the edit text field
-            mOutStringBuffer.setLength(0);
-            //mOutEditText.setText(mOutStringBuffer);
-        }
-    }
-
-    /**
-     * Sends a message.
-     */
-    private void sendMessage(User user) {
-        // Check that we're actually connected before trying anything
-        if (mChatService.getState() != BluetoothChatService.STATE_CONNECTED) {
-            Toast.makeText(this, "Not connected", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Check that there's actually something to send
-        if (user != null) {
-            // Get the message bytes and tell the BluetoothChatService to write
-            mChatService.write(user);
-
-            // Reset out string buffer to zero and clear the edit text field
-            mOutStringBuffer.setLength(0);
-            //mOutEditText.setText(mOutStringBuffer);
-        }
     }
 }

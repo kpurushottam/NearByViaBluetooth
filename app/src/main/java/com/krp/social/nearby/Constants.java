@@ -32,8 +32,14 @@ public interface Constants {
     public static final int MESSAGE_WRITE_OBJ = 6;
     public static final int MESSAGE_READ_OBJ = 7;
 
+    public static final int NEAR_BY_USER_FOUND = 8;
+
     // Key names received from the BluetoothChatService Handler
     public static final String DEVICE_NAME = "device_name";
     public static final String TOAST = "toast";
 
+    public static final String KEY_PREF_USER_NAME = "userName";
+    public static final String KEY_PREF_USER_AGE = "userAge";
+    public static final String KEY_PREF_USER_GENDER_MALE = "userGender";
+    public static final String KEY_PREF_USER_INTEREST = "userInterest";
 }

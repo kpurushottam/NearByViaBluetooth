@@ -1,5 +1,6 @@
 package com.krp.social.nearby;
 
+import android.graphics.Color;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
 import android.widget.ImageView;
@@ -15,7 +16,7 @@ public class NearByRecyclerViewHolder extends RecyclerView.ViewHolder {
     private User mUser;
 
     private NearByRecyclerViewHolder(
-            View itemView, ImageView ivProfile, TextView tvName, TextView tvAge,
+            final View itemView, ImageView ivProfile, TextView tvName, TextView tvAge,
             final NearByRecyclerAdapter.OnNearByUserSelectListener listener
     ) {
         super(itemView);
@@ -32,6 +33,17 @@ public class NearByRecyclerViewHolder extends RecyclerView.ViewHolder {
                 }
             });
         }
+
+        itemView.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if(hasFocus) {
+                    v.setBackgroundColor(Color.GRAY);
+                } else {
+                    v.setBackgroundColor(Color.TRANSPARENT);
+                }
+            }
+        });
     }
 
     public static NearByRecyclerViewHolder getInstance(

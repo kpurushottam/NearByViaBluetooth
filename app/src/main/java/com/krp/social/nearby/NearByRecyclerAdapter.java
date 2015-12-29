@@ -40,7 +40,12 @@ public class NearByRecyclerAdapter extends RecyclerView.Adapter<NearByRecyclerVi
         if(mListUsers == null) {
             mListUsers = new ArrayList<>();
         }
-        mListUsers.add(user);
+        if(!mListUsers.contains(user)) {
+            mListUsers.add(user);
+        } else {
+            mListUsers.remove(user);
+            mListUsers.add(user);
+        }
     }
 
     public void refreshDataSet(User... users) {
