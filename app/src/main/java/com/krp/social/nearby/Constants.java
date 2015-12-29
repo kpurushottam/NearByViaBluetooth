@@ -17,26 +17,16 @@
 package com.krp.social.nearby;
 
 /**
- * Defines several constants used between {@link BluetoothChatService} and the UI.
+ * Defines several constants used between {@link BluetoothConnectionService} and the UI.
  */
 public interface Constants {
 
-    // Message types sent from the BluetoothChatService Handler
-    public static final int MESSAGE_STATE_CHANGE = 1;
-    public static final int MESSAGE_READ = 2;
-    public static final int MESSAGE_WRITE = 3;
-    public static final int MESSAGE_DEVICE_NAME = 4;
-    public static final int MESSAGE_TOAST = 5;
+    // Message types sent from the BluetoothConnectionService Handler
+    public static final int MESSAGE_TOAST = 1;
+    public static final int MESSAGE_WRITE_OBJ = 2;
+    public static final int MESSAGE_READ_OBJ = 3;
+    public static final int NEAR_BY_USER_FOUND = 4;
 
-
-    public static final int MESSAGE_WRITE_OBJ = 6;
-    public static final int MESSAGE_READ_OBJ = 7;
-
-    public static final int NEAR_BY_USER_FOUND = 8;
-
-    // Key names received from the BluetoothChatService Handler
-    public static final String DEVICE_NAME = "device_name";
-    public static final String TOAST = "toast";
 
     public static final String KEY_PREF_USER_NAME = "userName";
     public static final String KEY_PREF_USER_AGE = "userAge";

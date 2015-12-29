@@ -22,7 +22,9 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if(NearByApplication.getInstance().getUserName() != null) {
+
+        User user = (User) getIntent().getSerializableExtra(KEY_INTENT_ACTIVITY_PROFILE);
+        if(user == null && NearByApplication.getInstance().getUserName() != null) {
             startActivity(new Intent(this, DashboardActivity.class));
             finish();
 
@@ -30,7 +32,6 @@ public class LoginActivity extends AppCompatActivity {
             setContentView(R.layout.activity_login);
             initViews();
 
-            User user = getIntent().getParcelableExtra(KEY_INTENT_ACTIVITY_PROFILE);
             if(user != null) {
                 btnLogin.setVisibility(View.GONE);
 

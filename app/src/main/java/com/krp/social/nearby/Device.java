@@ -9,11 +9,9 @@ import android.bluetooth.BluetoothSocket;
 public class Device {
     BluetoothSocket bluetoothSocket;
     BluetoothDevice bluetoothDevice;
-    String connectionType;
 
-    public Device(BluetoothSocket bluetoothSocket, BluetoothDevice bluetoothDevice, String connectionType) {
+    public Device(BluetoothSocket bluetoothSocket, BluetoothDevice bluetoothDevice) {
         this.bluetoothSocket = bluetoothSocket;
         this.bluetoothDevice = bluetoothDevice;
-        this.connectionType = connectionType;
     }
 }

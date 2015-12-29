@@ -1,6 +1,5 @@
 package com.krp.social.nearby;
 
-import android.app.ActionBar;
 import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
@@ -54,27 +53,13 @@ public class DashboardActivity extends AppCompatActivity
 
     private final int REQUEST_ENABLE_BT = 1001;
     private final int REQUEST_BT_DEVICE_DISCOVERY = 1002;
-
-    // Intent request codes
-    private static final int REQUEST_CONNECT_DEVICE_SECURE = 1;
-    private static final int REQUEST_CONNECT_DEVICE_INSECURE = 2;
     private static final int REQUEST_SHOW_USER_PROFILE = 1003;
 
     private List<User> connectedUsers = new ArrayList<>();
-
-    /**
-     * Name of the connectedReceiver device
-     */
-    private String mConnectedDeviceName = null;
-
-    /**
-     * String buffer for outgoing messages
-     */
-    private StringBuffer mOutStringBuffer;
     /**
      * Member object for the chat services
      */
-    private BluetoothChatService mChatService = null;
+    private BluetoothConnectionService mChatService = null;
 
     private ProgressDialog mWaitingDialog;
 
@@ -131,7 +116,7 @@ public class DashboardActivity extends AppCompatActivity
 
             } else if(action.equals(BluetoothDevice.ACTION_FOUND)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                connectDevice(device.getAddress(), false);
+                connectDevice(device.getAddress());
 
             } else if(action.equals(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)) {
                 mBtnRefreshSearch.setVisibility(View.VISIBLE);
@@ -146,63 +131,32 @@ public class DashboardActivity extends AppCompatActivity
         public void handleMessage(Message msg) {
             DashboardActivity activity = DashboardActivity.this;
             switch (msg.what) {
-                case Constants.MESSAGE_STATE_CHANGE:
-                    switch (msg.arg1) {
-                        case BluetoothChatService.STATE_CONNECTED:
-                            //setStatus(getString(R.string.title_connected_to, mConnectedDeviceName));
-                            //mConversationArrayAdapter.clear();
-                            break;
-                        case BluetoothChatService.STATE_CONNECTING:
-                            //setStatus(R.string.title_connecting);
-                            break;
-                        case BluetoothChatService.STATE_LISTEN:
-                        case BluetoothChatService.STATE_NONE:
-                            //setStatus(R.string.title_not_connected);
-                            break;
-                    }
-                    break;
-                case Constants.MESSAGE_WRITE:
-                    byte[] writeBuf = (byte[]) msg.obj;
-                    // construct a string from the buffer
-                    String writeMessage = new String(writeBuf);
-                    //mConversationArrayAdapter.add("Me:  " + writeMessage);
-                    break;
-
                 case Constants.MESSAGE_WRITE_OBJ:
                     User user = (User) msg.obj;
-                    alert(user.toString() + " : message sent");
-                    break;
-
-                case Constants.MESSAGE_READ:
-                    byte[] readBuf = (byte[]) msg.obj;
-                    // construct a string from the valid bytes in the buffer
-                    String readMessage = new String(readBuf, 0, msg.arg1);
-                    //mConversationArrayAdapter.add(mConnectedDeviceName + ":  " + readMessage);
+                    //alert(user.toString() + " : message sent");
                     break;
 
                 case Constants.MESSAGE_READ_OBJ:
                     dismissWaitingDialog();
-                    User user1 = (User) msg.obj;
+                    User user1;
+                    try {
+                        user1 = (User) msg.obj;
+                    } catch (Exception e) {
+                        String[] inputs = msg.obj.toString().split(":");
+                        user1 = new User(inputs[0], inputs[1], Boolean.valueOf(inputs[2]), inputs[3]);
+                    }
                     connectedUsers.add(user1);
                     startActivityForResult(new Intent(DashboardActivity.this, LoginActivity.class)
                                     .putExtra(LoginActivity.KEY_INTENT_ACTIVITY_PROFILE, user1),
                             REQUEST_SHOW_USER_PROFILE);
                     break;
 
-                case Constants.MESSAGE_DEVICE_NAME:
-                    // save the connectedReceiver device's name
-                    mConnectedDeviceName = msg.getData().getString(Constants.DEVICE_NAME);
-                    if (null != activity) {
-                        Toast.makeText(activity, "Connected to "
-                                + mConnectedDeviceName, Toast.LENGTH_SHORT).show();
-                    }
-                    break;
                 case Constants.MESSAGE_TOAST:
                     if (null != activity) {
-                        Toast.makeText(activity, msg.getData().getString(Constants.TOAST),
-                                Toast.LENGTH_SHORT).show();
+                        dismissWaitingDialog();
                     }
                     break;
+
                 case Constants.NEAR_BY_USER_FOUND:
                     if (null != activity) {
                         Device device = (Device) msg.obj;
@@ -286,12 +240,6 @@ public class DashboardActivity extends AppCompatActivity
 
             } else if(!mBluetoothAdapter.isDiscovering()) {
                 mBluetoothAdapter.startDiscovery();
-            }
-
-            if (mChatService != null) {
-                if (mChatService.getState() == BluetoothChatService.STATE_NONE) {
-                    mChatService.start();
-                }
             }
         }
     }
@@ -381,7 +329,6 @@ public class DashboardActivity extends AppCompatActivity
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.dashboard, menu);
         return true;
     }
@@ -423,23 +370,18 @@ public class DashboardActivity extends AppCompatActivity
      * Set up the UI and background operations for chat.
      */
     private void setupChat() {
-        //Log.d(TAG, "setupChat()");
-
-        // Initialize the BluetoothChatService to perform bluetooth connections
-        mChatService = new BluetoothChatService(this, mHandler);
-
-        // Initialize the buffer for outgoing messages
-        mOutStringBuffer = new StringBuffer("");
+        // Initialize the BluetoothConnectionService to perform bluetooth connections
+        if(mChatService != null) {
+            mChatService.stop();
+        }
+        mChatService = new BluetoothConnectionService(this, mHandler);
+        mChatService.start();
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
         if (id == R.id.action_frnds) {
             if (!mBluetoothAdapter.isEnabled()) {
                 startActivityForResult(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),
@@ -500,59 +442,30 @@ public class DashboardActivity extends AppCompatActivity
                     mBtnRefreshSearch.setVisibility(View.GONE);
                     mProgressSearching.setVisibility(View.VISIBLE);
                 }
+                if(mBluetoothAdapter.getScanMode() !=
+                    BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE) {
+                    Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+                    discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 0);
+                    startActivityForResult(discoverableIntent, REQUEST_BT_DEVICE_DISCOVERY);
+                } else {
+                    mBluetoothAdapter.startDiscovery();
+                }
                 break;
         }
     }
 
     @Override
     public void onUserSelected(User user) {
-        //if(connectedUsers.contains(user)) {
-            showWaitingDialog();
-            Device device = nearBy.get(user.deviceAddress);
-            mChatService.connect(device.bluetoothDevice, Boolean.valueOf(device.connectionType),
-                    BluetoothChatService.STATE_FETCHING_DATA);
-        //}
+        showWaitingDialog();
+        Device device = nearBy.get(user.deviceAddress);
+        mChatService.fetch(device.bluetoothDevice);
     }
 
     /**
      * Establish connection with other divice
      */
-    private void connectDevice(String address, boolean secure) {
+    private void connectDevice(String address) {
         BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
-        mChatService.connect(device, secure);
-    }
-
-    /**
-     * Updates the status on the action bar.
-     *
-     * @param resId a string resource ID
-     */
-    private void setStatus(int resId) {
-        DashboardActivity activity = this;
-        if (null == activity) {
-            return;
-        }
-        final ActionBar actionBar = activity.getActionBar();
-        if (null == actionBar) {
-            return;
-        }
-        actionBar.setSubtitle(resId);
-    }
-
-    /**
-     * Updates the status on the action bar.
-     *
-     * @param subTitle status
-     */
-    private void setStatus(CharSequence subTitle) {
-        DashboardActivity activity = this;
-        if (null == activity) {
-            return;
-        }
-        final ActionBar actionBar = activity.getActionBar();
-        if (null == actionBar) {
-            return;
-        }
-        actionBar.setSubtitle(subTitle);
+        mChatService.connect(device);
     }
 }
